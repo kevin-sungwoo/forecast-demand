@@ -1,0 +1,140 @@
+---
+title: "Demand Forecasting for A Fast-Food Restaurant Chain"
+author: "Kevin Park (CID: 01814579)"
+date: "Due 10th March"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+```
+
+
+```{r}
+# Only leave 'Lettuce' and 'Lettuce - Metric' in ingredients table
+ingredients = read.csv('ingredients.csv')
+
+ingredients = ingredients %>% 
+  filter(IngredientId %in% c(27, 291)) %>% 
+  select(IngredientName, IngredientId)
+```
+
+```{r}
+subrecipe_ingredients = read.csv("sub_recipe_ingr_assignments.csv")
+
+# Only leave 'Lettuce' and 'Lettuce - Metric' in subrecipe_ingr_assignments table
+subrecipe_ingredients = subrecipe_ingredients %>% 
+  filter(IngredientId %in% c(27, 291))
+
+# Convert metric quantity into ounce quantity
+subrecipe_lettuce$Quantity[subrecipe_lettuce$IngredientId == 291] = subrecipe_lettuce$Quantity[subrecipe_lettuce$IngredientId == 291] * 0.0352739619
+```
+
+```{r}
+recipe_subrecipe_assignment = read.csv("recipe_sub_recipe_assignments.csv")
+
+# Inner join recipe_sub_recipe_assignment with subrecipe_lettuce
+recipe_subrecipe_lettuce = merge(x = recipe_subrecipe_assignment, y = subrecipe_lettuce, by = 'SubRecipeId')
+
+# Calculate total amount of lettuce used
+recipe_subrecipe_lettuce$subrecipe_amount = recipe_subrecipe_lettuce$Factor * recipe_subrecipe_lettuce$Quantity
+
+recipe_subrecipe_lettuce = recipe_subrecipe_lettuce %>% 
+  select(RecipeId, subrecipe_amount)
+```
+
+```{r}
+recipe_ingredients = read.csv("recipe_ingredient_assignments.csv")
+
+# Only leave 'Lettuce' and 'Lettuce - Metric' in recipe_ingr_assignments table
+recipe_ingredients = recipe_ingredients %>% 
+  filter(IngredientId %in% c(27, 291))
+
+# Convert metric quantity into ounce quantity
+recipe_ingredients$Quantity[recipe_ingredients$IngredientId == 291] = recipe_ingredients$Quantity[recipe_ingredients$IngredientId == 291] * 0.0352739619
+
+recipe_ingredients = recipe_ingredients %>% 
+  select(RecipeId, Quantity)
+```
+
+```{r}
+recipes = read.csv("recipes.csv")
+
+# Outer join recipes with recipe_sub_recipe_ingr_assignments
+# Main recipe may have several subrecipe thus need to sum subreciep amount after grouping by RecipeId
+recipes_lettuce = merge(x = recipes, y = recipe_subrecipe_lettuce, by = 'RecipeId', all.x=TRUE) %>% 
+  group_by(RecipeId) %>% 
+  summarise(subrecipe_amount = sum(subrecipe_amount))
+
+# Outer join recipes_lettuce with recipe_ingr_assignments
+recipes_lettuce = merge(x = recipes_lettuce, y = recipe_ingredients, by = 'RecipeId', all.x = TRUE)
+
+# Replace every NA values with 0
+recipes_lettuce[is.na(recipes_lettuce)] = 0
+
+# Sum up lettuce required in subrecipe and recipe
+recipes_lettuce$total = recipes_lettuce$subrecipe_amount + recipes_lettuce$Quantity
+
+recipes_total = recipes_lettuce %>% 
+  select(RecipeId, total)
+```
+
+```{r}
+menu_items = read.csv("menu_items.csv")
+
+# Inner join menu_items with recipes_total
+menu_lettuce = merge(x = menu_items, y = recipes_total, by = 'RecipeId')
+
+# Change column 'MenuItemId' to 'Id' to join with other table
+menu_lettuce$Id = menu_lettuce$MenuItemId
+
+menu_lettuce = menu_lettuce %>% 
+  select(PLU, total, Id)
+
+menu_lettuce$PLU = as.character(menu_lettuce$PLU)
+```
+
+
+```{r}
+menu = read.csv("menuitem.csv")
+
+menu$PLU = as.character(menu$PLU)
+
+# Inner join menuitem and menu_lettuce by two keys: 'PLU' and 'Id'
+total_lettuce = merge(x = menu, y = menu_lettuce, by = c('PLU', 'Id')) %>% 
+  select(StoreNumber, Quantity, date, total)
+
+# Calculate total lettuce quantity required to serve a specific menu order
+total_lettuce$lettuce_demand = total_lettuce$Quantity * total_lettuce$total
+
+unique(total_lettuce$StoreNumber)
+```
+
+```{r}
+# Divide up the dataset by each store
+# Get a running sum of lettuce quantity by each date
+store_4904 = total_lettuce %>% 
+  filter(StoreNumber == 4904) %>% 
+  select(date, lettuce_demand) %>% 
+  group_by(date) %>% 
+  summarise(lettuce_demand = sum(lettuce_demand))
+
+store_12631 = total_lettuce %>% 
+  filter(StoreNumber == 12631) %>% 
+  select(date, lettuce_demand) %>% 
+  group_by(date) %>% 
+  summarise(lettuce_demand = sum(lettuce_demand))
+
+store_20974 = total_lettuce %>% 
+  filter(StoreNumber == 20974) %>% 
+  select(date, lettuce_demand) %>% 
+  group_by(date) %>% 
+  summarise(lettuce_demand = sum(lettuce_demand))
+
+store_46673 = total_lettuce %>% 
+  filter(StoreNumber == 46673) %>% 
+  select(date, lettuce_demand) %>% 
+  group_by(date) %>% 
+  summarise(lettuce_demand = sum(lettuce_demand))
+```
+
